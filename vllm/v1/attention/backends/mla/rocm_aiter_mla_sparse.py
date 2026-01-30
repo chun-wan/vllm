@@ -430,6 +430,22 @@ class ROCMAiterMLASparseMetadataBuilder(
         )
         return metadata
 
+    def build_for_drafting(
+        self,
+        common_attn_metadata: CommonAttentionMetadata,
+        draft_index: int,
+    ) -> ROCMAiterMLASparseMetadata:
+        """
+        Build attention metadata for draft model (speculative decoding).
+        For MLA sparse attention, we use the same build logic as the regular build
+        since the sparse indexing is handled by the indexer cache.
+        """
+        return self.build(
+            common_prefix_len=0,
+            common_attn_metadata=common_attn_metadata,
+            fast_build=True,
+        )
+
 
 # Take from
 # https://github.com/deepseek-ai/FlashMLA/blob/main/tests/test_flash_mla_prefill.py#L72

@@ -199,6 +199,13 @@ class SpecDecodeBaseProposer:
 
             rocm_types.append(FlexAttentionMetadata)
 
+            # ROCM_AITER_MLA_SPARSE backend support for MLA sparse models
+            from vllm.v1.attention.backends.mla.rocm_aiter_mla_sparse import (
+                ROCMAiterMLASparseMetadata,
+            )
+
+            rocm_types.append(ROCMAiterMLASparseMetadata)
+
             self.allowed_attn_types = tuple(rocm_types)
 
         # Parse the speculative token tree.
@@ -523,6 +530,17 @@ class SpecDecodeBaseProposer:
             )
             for layer_name in self.attn_layer_names:
                 per_layer_attn_metadata[layer_name] = attn_metadata
+
+            # Rebuild indexer metadata for sparse MLA models
+            if self.draft_indexer_metadata_builder:
+                draft_indexer_metadata = (
+                    self.draft_indexer_metadata_builder.build_for_drafting(
+                        common_attn_metadata=common_attn_metadata,
+                        draft_index=token_index + 1,
+                    )
+                )
+                for layer_name in self.indexer_layer_names:
+                    per_layer_attn_metadata[layer_name] = draft_indexer_metadata
 
             # copy inputs to buffer for cudagraph
             self.input_ids[:batch_size] = input_ids

@@ -348,3 +348,19 @@ class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):
         # if get_tensor_model_parallel_rank() == 0:
         #     logger.info(f"attn_metadata: {attn_metadata}")
         return attn_metadata
+
+    def build_for_drafting(
+        self,
+        common_attn_metadata: CommonAttentionMetadata,
+        draft_index: int,
+    ) -> DeepseekV32IndexerMetadata:
+        """
+        Build attention metadata for draft model (speculative decoding).
+        For indexer, we use the same build logic as the regular build
+        since the indexer cache handles the sparse attention.
+        """
+        return self.build(
+            common_prefix_len=0,
+            common_attn_metadata=common_attn_metadata,
+            fast_build=True,
+        )
