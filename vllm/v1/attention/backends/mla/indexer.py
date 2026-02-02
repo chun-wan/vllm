@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 import torch
+import vllm.envs as envs
 
 from vllm.config import VllmConfig
 from vllm.logger import init_logger
@@ -15,6 +16,7 @@ from vllm.v1.attention.backend import (
     CommonAttentionMetadata,
     MultipleOf,
 )
+
 from vllm.v1.attention.backends.utils import (
     split_decodes_and_prefills,
     split_prefill_chunks,
@@ -185,7 +187,15 @@ def get_max_prefill_buffer_size(vllm_config: VllmConfig):
     # within the flashmla_sparse workspace.
     # For DeepSeek-V3.2, the max_model_len is 163840.
     #   40 * 163840 * 132 = 865075200 bytes = 825 MB
-    return max_model_len * 40
+    #
+    # FIX: Limit the buffer size to prevent OOM in fp8_mqa_logits
+    # The logits tensor has shape [seq_len, seq_len_kv], so memory = seq_len^2 * 4 bytes
+    # To limit logits to ~4GB: sqrt(4GB / 4) = 32768
+    # Configurable via VLLM_MLA_MAX_PREFILL_BUFFER environment variable
+    # Default 65536 provides ~16GB logits tensor (65536^2 * 4 bytes)
+    max_prefill_buffer = envs.VLLM_MLA_MAX_PREFILL_BUFFER
+    computed_size = max_model_len * 40
+    return min(computed_size, max_prefill_buffer)
 
 
 class DeepseekV32IndexerMetadataBuilder(AttentionMetadataBuilder):

@@ -4,6 +4,7 @@ import functools
 import importlib
 
 import torch
+import vllm.envs as envs
 
 from vllm.forward_context import get_forward_context
 from vllm.platforms import current_platform
@@ -588,6 +589,14 @@ def rocm_aiter_sparse_attn_indexer(
         assert batch_size == decode_metadata.seq_lens.shape[0]
         num_padded_tokens = batch_size * next_n
 
+        # Fix: Limit logits tensor size to prevent OOM
+        # Using min(max_model_len, 32768) as a reasonable upper bound
+        # - 32768 is max_num_batched_tokens default, covers most use cases
+        # - This keeps tensor size fixed to avoid CUDA Graph issues
+        # - Can be tuned via environment variable if needed
+        decode_logits_limit = envs.VLLM_MLA_DECODE_LOGITS_LIMIT
+        safe_max_seq_len = min(max_model_len, decode_logits_limit)
+        
         logits = rocm_fp8_paged_mqa_logits(
             padded_q_fp8_decode_tokens,
             kv_cache,
@@ -595,7 +604,7 @@ def rocm_aiter_sparse_attn_indexer(
             decode_metadata.seq_lens,
             decode_metadata.block_table,
             decode_metadata.schedule_metadata,
-            max_model_len=max_model_len,
+            max_model_len=safe_max_seq_len,
         )
 
         num_rows = logits.shape[0]

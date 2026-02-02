@@ -141,6 +141,8 @@ if TYPE_CHECKING:
     VLLM_SERVER_DEV_MODE: bool = False
     VLLM_V1_OUTPUT_PROC_CHUNK_SIZE: int = 128
     VLLM_MLA_DISABLE: bool = False
+    VLLM_MLA_MAX_PREFILL_BUFFER: int = 65536
+    VLLM_MLA_DECODE_LOGITS_LIMIT: int = 32768
     VLLM_FLASH_ATTN_MAX_NUM_SPLITS_FOR_CUDA_GRAPH: int = 32
     VLLM_RAY_PER_WORKER_GPUS: float = 1.0
     VLLM_RAY_BUNDLE_INDICES: str = ""
@@ -1118,6 +1120,18 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # If set, vLLM will disable the MLA attention optimizations.
     "VLLM_MLA_DISABLE": lambda: bool(int(os.getenv("VLLM_MLA_DISABLE", "0"))),
+    # Maximum prefill buffer size for MLA sparse attention indexer.
+    # Limits memory allocation for prefill logits tensor.
+    # Default 65536 provides ~16GB max logits tensor.
+    "VLLM_MLA_MAX_PREFILL_BUFFER": lambda: int(
+        os.getenv("VLLM_MLA_MAX_PREFILL_BUFFER", "65536")
+    ),
+    # Maximum decode logits buffer size for MLA sparse attention.
+    # Limits memory allocation per decode step.
+    # Default 32768 covers most use cases without OOM.
+    "VLLM_MLA_DECODE_LOGITS_LIMIT": lambda: int(
+        os.getenv("VLLM_MLA_DECODE_LOGITS_LIMIT", "32768")
+    ),
     # If set, vLLM will pick up the provided Flash Attention MLA
     # max number splits for cuda graph decode
     "VLLM_FLASH_ATTN_MAX_NUM_SPLITS_FOR_CUDA_GRAPH": lambda: int(
