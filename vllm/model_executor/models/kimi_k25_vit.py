@@ -297,7 +297,7 @@ class Rope2DPosEmbRepeated(nn.Module):
 
 
 class MLP2(nn.Module):
-    """Two-layer MLP with tensor parallel support."""
+    """Two-layer MLP - using ReplicatedLinear for Kimi K2.5 compatibility."""
 
     def __init__(
         self,
@@ -310,19 +310,18 @@ class MLP2(nn.Module):
         super().__init__()
         assert len(dims) == 3
         self.use_data_parallel = use_data_parallel
-        self.fc0 = ColumnParallelLinear(
+        # Force ReplicatedLinear for Kimi K2.5
+        self.fc0 = ReplicatedLinear(
             dims[0],
             dims[1],
             bias=bias,
             prefix=maybe_prefix(prefix, "fc0"),
-            disable_tp=self.use_data_parallel,
         )
-        self.fc1 = RowParallelLinear(
+        self.fc1 = ReplicatedLinear(
             dims[1],
             dims[2],
             bias=bias,
             prefix=maybe_prefix(prefix, "fc1"),
-            disable_tp=self.use_data_parallel,
         )
         self.activation = activation
 
@@ -347,7 +346,7 @@ class MoonViTEncoderLayer(nn.Module):
         attn_bias: bool = False,
     ):
         super().__init__()
-        self.use_data_parallel = is_vit_use_data_parallel()
+        self.use_data_parallel = True  # Force data parallel for Kimi K2.5
 
         self.num_heads = num_heads
         self.hidden_dim = hidden_dim
@@ -365,21 +364,19 @@ class MoonViTEncoderLayer(nn.Module):
             prefix=f"{prefix}.mlp",
             use_data_parallel=self.use_data_parallel,
         )
-        self.wqkv = QKVParallelLinear(
-            hidden_size=hidden_dim,
-            head_size=self.hidden_size_per_attention_head,
-            total_num_heads=num_heads,
-            total_num_kv_heads=num_heads,
+        # Use ReplicatedLinear instead of QKVParallelLinear for Kimi K2.5
+        self.wqkv = ReplicatedLinear(
+            hidden_dim,
+            hidden_dim * 3,  # QKV packed
             bias=attn_bias,
             prefix=f"{prefix}.wqkv",
-            disable_tp=self.use_data_parallel,
         )
-        self.wo = RowParallelLinear(
+        # Use ReplicatedLinear instead of RowParallelLinear for Kimi K2.5
+        self.wo = ReplicatedLinear(
             hidden_dim,
             hidden_dim,
             bias=attn_bias,
             prefix=f"{prefix}.wo",
-            disable_tp=self.use_data_parallel,
         )
         self.attn = MMEncoderAttention(
             num_heads=self.num_attention_heads_per_partition,
@@ -554,7 +551,7 @@ class MoonViT3dPretrainedModel(nn.Module):
         self.merge_type = config.merge_type
 
         self.patch_embed = MoonVision3dPatchEmbed(
-            out_dim=config.hidden_size,
+            out_dim=config.mm_hidden_size,
             patch_size=config.patch_size,
             pos_emb_height=config.init_pos_emb_height,
             pos_emb_width=config.init_pos_emb_width,
@@ -563,12 +560,12 @@ class MoonViT3dPretrainedModel(nn.Module):
         )
 
         self.encoder = MoonViT3dEncoder(
-            hidden_dim=config.hidden_size,
-            num_layers=config.num_hidden_layers,
+            hidden_dim=config.mm_hidden_size,
+            num_layers=config.vt_num_hidden_layers,
             block_cfg={
-                "num_heads": config.num_attention_heads,
-                "hidden_dim": config.hidden_size,
-                "mlp_dim": config.intermediate_size,
+                "num_heads": config.vt_num_attention_heads,
+                "hidden_dim": config.mm_hidden_size,
+                "mlp_dim": config.vt_intermediate_size,
                 "activation": get_act_fn("gelu_pytorch_tanh"),
                 "attn_bias": True,
             },
@@ -653,9 +650,9 @@ class KimiK25MultiModalProjector(nn.Module):
 
         # Hidden size after patch merging
         merge_h, merge_w = config.merge_kernel_size
-        self.hidden_size = config.hidden_size * merge_h * merge_w
+        self.hidden_size = config.mm_hidden_size * merge_h * merge_w
 
-        self.pre_norm = torch.nn.LayerNorm(config.hidden_size, eps=1e-5)
+        self.pre_norm = torch.nn.LayerNorm(config.mm_hidden_size, eps=1e-5)
         self.linear_1 = ReplicatedLinear(
             self.hidden_size,
             self.hidden_size,
@@ -664,7 +661,7 @@ class KimiK25MultiModalProjector(nn.Module):
         )
         self.linear_2 = ReplicatedLinear(
             self.hidden_size,
-            config.mm_hidden_size,
+            config.text_hidden_size,
             bias=True,
             prefix=f"{prefix}.linear_2",
         )

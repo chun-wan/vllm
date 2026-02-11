@@ -98,6 +98,7 @@ def _get_vit_attn_backend(
 def get_vit_attn_backend(
     head_size: int,
     dtype: torch.dtype,
+    attn_backend_override = None,  # Added for compatibility
 ) -> AttentionBackendEnum:
     """
     Get the attention backend for Vision Transformer.
@@ -140,7 +141,8 @@ def is_vit_use_data_parallel():
     mm_encoder_tp_mode = (
         multimodal_config.mm_encoder_tp_mode if multimodal_config is not None else None
     )
-    return mm_encoder_tp_mode == "data"
+    # Default to data parallel for Kimi K2.5 compatibility
+    return mm_encoder_tp_mode == "data" or mm_encoder_tp_mode is None
 
 
 def should_torch_compile_mm_vit(vllm_config: VllmConfig) -> bool:
