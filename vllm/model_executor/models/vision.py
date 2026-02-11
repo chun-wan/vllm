@@ -98,9 +98,15 @@ def _get_vit_attn_backend(
 def get_vit_attn_backend(
     head_size: int,
     dtype: torch.dtype,
+    attn_backend_override: AttentionBackendEnum | None = None,
 ) -> AttentionBackendEnum:
     """
     Get the attention backend for Vision Transformer.
+
+    Args:
+        head_size: The head size of the attention.
+        dtype: The data type of the attention.
+        attn_backend_override: Optional override for the attention backend.
     """
     try:
         vllm_config: VllmConfig = get_current_vllm_config()
@@ -111,11 +117,13 @@ def get_vit_attn_backend(
     except AssertionError:
         multimodal_config = None
 
-    attn_backend_override = (
-        multimodal_config.mm_encoder_attn_backend
-        if multimodal_config is not None
-        else None
-    )
+    # Use provided override, or get from config
+    if attn_backend_override is None:
+        attn_backend_override = (
+            multimodal_config.mm_encoder_attn_backend
+            if multimodal_config is not None
+            else None
+        )
     attn_backend = _get_vit_attn_backend(
         head_size,
         dtype,
@@ -127,6 +135,8 @@ def get_vit_attn_backend(
 def is_vit_use_data_parallel():
     """
     Get the tensor parallel type for Vision Transformer.
+    Returns True for data parallel mode (default for models with non-sharded
+    vision encoder weights like Kimi K2.5).
     """
     try:
         vllm_config: VllmConfig = get_current_vllm_config()
@@ -140,7 +150,8 @@ def is_vit_use_data_parallel():
     mm_encoder_tp_mode = (
         multimodal_config.mm_encoder_tp_mode if multimodal_config is not None else None
     )
-    return mm_encoder_tp_mode == "data"
+    # Default to data parallel when not explicitly set to "tensor"
+    return mm_encoder_tp_mode != "tensor"
 
 
 def should_torch_compile_mm_vit(vllm_config: VllmConfig) -> bool:

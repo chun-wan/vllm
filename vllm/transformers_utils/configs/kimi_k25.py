@@ -22,40 +22,48 @@ class KimiK25VisionConfig(PretrainedConfig):
         init_pos_emb_width: int = 64,
         init_pos_emb_time: int = 4,
         pos_emb_type: str = "divided_fixed",
-        num_attention_heads: int = 16,
-        num_hidden_layers: int = 27,
-        hidden_size: int = 1152,
-        intermediate_size: int = 4304,
+        num_attention_heads: int | None = None,
+        num_hidden_layers: int | None = None,
+        hidden_size: int | None = None,
+        intermediate_size: int | None = None,
+        # Kimi K2.5 specific attribute names (vt_ prefix)
+        vt_num_attention_heads: int = 16,
+        vt_num_hidden_layers: int = 27,
+        vt_hidden_size: int = 1152,
+        vt_intermediate_size: int = 4304,
         merge_kernel_size: tuple[int, int] = (2, 2),
         video_attn_type: str = "spatial_temporal",
         merge_type: str = "sd2_tpool",
         # MM Projector
         mm_projector_type: str = "patchmerger",
         mm_hidden_size: int | None = None,
+        text_hidden_size: int | None = None,
         projector_hidden_act: str = "gelu",
         projector_ln_eps: float = 1e-5,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        # Vision Tower
+        # Vision Tower - support both naming conventions
         self.patch_size = patch_size
         self.init_pos_emb_height = init_pos_emb_height
         self.init_pos_emb_width = init_pos_emb_width
         self.init_pos_emb_time = init_pos_emb_time
         self.pos_emb_type = pos_emb_type
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
+        # Use vt_ prefixed values if standard names not provided
+        self.num_attention_heads = num_attention_heads or vt_num_attention_heads
+        self.num_hidden_layers = num_hidden_layers or vt_num_hidden_layers
+        self.hidden_size = hidden_size or vt_hidden_size
+        self.intermediate_size = intermediate_size or vt_intermediate_size
         self.merge_kernel_size = merge_kernel_size
         self.video_attn_type = video_attn_type
         self.merge_type = merge_type
         # MM Projector
         self.mm_projector_type = mm_projector_type
+        self.text_hidden_size = text_hidden_size
         if mm_hidden_size is not None:
             self.mm_hidden_size = mm_hidden_size
         else:
-            self.mm_hidden_size = hidden_size
+            self.mm_hidden_size = self.hidden_size
         self.projector_hidden_act = projector_hidden_act
         self.projector_ln_eps = projector_ln_eps
 

@@ -553,8 +553,14 @@ class MoonViT3dPretrainedModel(nn.Module):
         self.patch_size = config.patch_size
         self.merge_type = config.merge_type
 
+        # Support both naming conventions (vt_* prefix and standard)
+        hidden_size = getattr(config, 'hidden_size', None) or getattr(config, 'vt_hidden_size', 1152)
+        num_hidden_layers = getattr(config, 'num_hidden_layers', None) or getattr(config, 'vt_num_hidden_layers', 27)
+        num_attention_heads = getattr(config, 'num_attention_heads', None) or getattr(config, 'vt_num_attention_heads', 16)
+        intermediate_size = getattr(config, 'intermediate_size', None) or getattr(config, 'vt_intermediate_size', 4304)
+
         self.patch_embed = MoonVision3dPatchEmbed(
-            out_dim=config.hidden_size,
+            out_dim=hidden_size,
             patch_size=config.patch_size,
             pos_emb_height=config.init_pos_emb_height,
             pos_emb_width=config.init_pos_emb_width,
@@ -563,12 +569,12 @@ class MoonViT3dPretrainedModel(nn.Module):
         )
 
         self.encoder = MoonViT3dEncoder(
-            hidden_dim=config.hidden_size,
-            num_layers=config.num_hidden_layers,
+            hidden_dim=hidden_size,
+            num_layers=num_hidden_layers,
             block_cfg={
-                "num_heads": config.num_attention_heads,
-                "hidden_dim": config.hidden_size,
-                "mlp_dim": config.intermediate_size,
+                "num_heads": num_attention_heads,
+                "hidden_dim": hidden_size,
+                "mlp_dim": intermediate_size,
                 "activation": get_act_fn("gelu_pytorch_tanh"),
                 "attn_bias": True,
             },
@@ -651,11 +657,17 @@ class KimiK25MultiModalProjector(nn.Module):
         super().__init__()
         self.use_data_parallel = use_data_parallel
 
+        # Support both naming conventions
+        vt_hidden_size = getattr(config, 'hidden_size', None) or getattr(config, 'vt_hidden_size', 1152)
+
         # Hidden size after patch merging
         merge_h, merge_w = config.merge_kernel_size
-        self.hidden_size = config.hidden_size * merge_h * merge_w
+        self.hidden_size = vt_hidden_size * merge_h * merge_w
 
-        self.pre_norm = torch.nn.LayerNorm(config.hidden_size, eps=1e-5)
+        # Output dimension should be text_hidden_size for projecting to LLM
+        out_dim = getattr(config, 'text_hidden_size', None) or config.mm_hidden_size
+
+        self.pre_norm = torch.nn.LayerNorm(vt_hidden_size, eps=1e-5)
         self.linear_1 = ReplicatedLinear(
             self.hidden_size,
             self.hidden_size,
@@ -664,7 +676,7 @@ class KimiK25MultiModalProjector(nn.Module):
         )
         self.linear_2 = ReplicatedLinear(
             self.hidden_size,
-            config.mm_hidden_size,
+            out_dim,
             bias=True,
             prefix=f"{prefix}.linear_2",
         )
