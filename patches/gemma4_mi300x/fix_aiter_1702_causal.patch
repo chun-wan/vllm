@@ -1,0 +1,26 @@
+--- a/vllm/v1/attention/backends/rocm_aiter_unified_attn.py
++++ b/vllm/v1/attention/backends/rocm_aiter_unified_attn.py
+@@ -235,7 +235,7 @@
+             max_seqlen_k=max_seqlen_k,
+             softmax_scale=softmax_scale,
+-            causal=True,
++            causal=(self.attn_type not in (AttentionType.ENCODER_ONLY, AttentionType.ENCODER)),
+             alibi_slopes=self.alibi_slopes,
+             window_size=self.sliding_window,
+             block_table=block_table,
+
+Fix for ROCm/aiter#1702: Make causal flag dynamic in rocm_aiter_unified_attn.py
+
+The original code hardcodes causal=True, blocking bidirectional attention
+needed by Gemma4's vision tokens. This patch makes it dynamic based on
+the attention type:
+- ENCODER_ONLY / ENCODER: causal=False (bidirectional)
+- DECODER / ENCODER_DECODER: causal=True (autoregressive)
+
+Apply inside container:
+  docker exec gemma4-vllm python3 -c "
+  path = '/usr/local/lib/python3.12/dist-packages/vllm/v1/attention/backends/rocm_aiter_unified_attn.py'
+  with open(path) as f: c = f.read()
+  c = c.replace('causal=True,', 'causal=(self.attn_type not in (AttentionType.ENCODER_ONLY, AttentionType.ENCODER)),', 1)
+  with open(path, 'w') as f: f.write(c)
+  "
